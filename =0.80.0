@@ -1,0 +1,20 @@
+Requirement already satisfied: flet in /home/harshagale/miniconda3/lib/python3.13/site-packages (0.24.1)
+Collecting flet
+  Using cached flet-0.83.0-py3-none-any.whl.metadata (6.9 kB)
+Requirement already satisfied: oauthlib>=3.2.2 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from flet) (3.3.1)
+Requirement already satisfied: httpx>=0.28.1 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from flet) (0.28.1)
+Requirement already satisfied: repath>=0.9.0 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from flet) (0.9.0)
+Requirement already satisfied: msgpack>=1.1.0 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from flet) (1.1.1)
+Requirement already satisfied: anyio in /home/harshagale/miniconda3/lib/python3.13/site-packages (from httpx>=0.28.1->flet) (4.12.1)
+Requirement already satisfied: certifi in /home/harshagale/miniconda3/lib/python3.13/site-packages (from httpx>=0.28.1->flet) (2025.11.12)
+Requirement already satisfied: httpcore==1.* in /home/harshagale/miniconda3/lib/python3.13/site-packages (from httpx>=0.28.1->flet) (1.0.9)
+Requirement already satisfied: idna in /home/harshagale/miniconda3/lib/python3.13/site-packages (from httpx>=0.28.1->flet) (3.11)
+Requirement already satisfied: h11>=0.16 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from httpcore==1.*->httpx>=0.28.1->flet) (0.16.0)
+Requirement already satisfied: six>=1.9.0 in /home/harshagale/miniconda3/lib/python3.13/site-packages (from repath>=0.9.0->flet) (1.17.0)
+Using cached flet-0.83.0-py3-none-any.whl (561 kB)
+Installing collected packages: flet
+  Attempting uninstall: flet
+    Found existing installation: flet 0.24.1
+    Uninstalling flet-0.24.1:
+      Successfully uninstalled flet-0.24.1
+Successfully installed flet-0.83.0

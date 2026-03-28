@@ -10,8 +10,9 @@ python-dotenv>=1.0.0
 # RAG (optional)
 chromadb>=0.5.0
 
-# UI (optional)
+# UI
 streamlit>=1.39.0
+flet>=0.24.0,<0.80.0
 
 # CLI (pretty output)
 click>=8.1.0
