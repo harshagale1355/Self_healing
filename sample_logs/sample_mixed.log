@@ -1,0 +1,17 @@
+2025-03-28 10:00:01 INFO app started
+2025-03-28 10:00:02 ERROR Connection refused to database host db.local:5432
+Traceback (most recent call last):
+  File "/app/services/user.py", line 42, in fetch_user
+    return db.query(User).get(user_id)
+  File "/app/db/session.py", line 10, in query
+    conn = pool.connect()
+psycopg2.OperationalError: could not connect to server: Connection refused
+
+2025-03-28 10:01:00 ERROR UnhandledPromiseRejection: fetch failed
+    at /app/dist/api.js:88:15
+
+2025-03-28 10:02:00 WARN low memory threshold
+java.lang.OutOfMemoryError: Java heap space
+	at com.example.BatchProcessor.run(BatchProcessor.java:120)
+
+2025-03-28 10:03:00 ERROR ModuleNotFoundError: No module named 'requests'
