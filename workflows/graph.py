@@ -1,6 +1,10 @@
 """
-LangGraph pipeline: read → filter → per-error: classify → context → code window → RAG
-→ solution → validate → severity + patch → aggregate metrics → RAG store.
+LangGraph pipeline — v3.
+
+read → filter → per-error loop:
+  classify → context → code_window → rag → solution → validate
+  → postprocess (severity + patch + reason + root_cause + fix_risk
+                  + confidence + similar_cases) → aggregate metrics → RAG store.
 """
 from __future__ import annotations
 
@@ -40,6 +44,7 @@ class AnalysisState(TypedDict, total=False):
     classification: dict[str, Any]
     context_payload: dict[str, Any]
     rag_snippets: list[str]
+    similar_cases: list[dict[str, Any]]          # v3: slim similar cases for output
     draft_solution: dict[str, Any]
     validated_solution: dict[str, Any]
     results: Annotated[list[dict[str, Any]], operator.add]
@@ -47,6 +52,8 @@ class AnalysisState(TypedDict, total=False):
     status: str
     skip_reason: str | None
 
+
+# ── Nodes ────────────────────────────────────────────────────────────────────
 
 def node_log_reader(state: AnalysisState) -> dict[str, Any]:
     path = state.get("project_path", ".")
@@ -95,7 +102,11 @@ def node_empty_end(state: AnalysisState) -> dict[str, Any]:
                 "patch": "",
                 "severity": "low",
                 "priority": 5,
-                "confidence": 0.0,
+                "confidence": {"overall": 0.0, "pattern_match": 0.0, "llm_reasoning": 0.0, "context_match": 0.0},
+                "reason": {"immediate": "", "root": "", "why_fix_works": ""},
+                "root_cause": {"level_1": "", "level_2": "", "level_3": ""},
+                "fix_risk": {"level": "low", "reason": "No error detected."},
+                "similar_cases": [],
             }
         ],
         "skip_reason": "no_error_lines",
@@ -137,11 +148,12 @@ def node_code_context(state: AnalysisState) -> dict[str, Any]:
 def node_rag(state: AnalysisState) -> dict[str, Any]:
     rag_on = bool(state.get("use_rag")) or config.ENABLE_RAG
     if not rag_on:
-        return {"rag_snippets": []}
+        return {"rag_snippets": [], "similar_cases": []}
     line = state.get("current_line", "")
     retriever = ErrorRAGRetriever(enabled=True)
     snippets = retriever.similar(line, k=5)
-    return {"rag_snippets": snippets}
+    similar_cases = retriever.similar_cases_for_output(line, k=3)
+    return {"rag_snippets": snippets, "similar_cases": similar_cases}
 
 
 def node_solution(state: AnalysisState) -> dict[str, Any]:
@@ -161,21 +173,34 @@ def node_validator(state: AnalysisState) -> dict[str, Any]:
 
 
 def node_postprocess(state: AnalysisState) -> dict[str, Any]:
-    """Severity, patch, slim output, RAG persist, per-error metrics."""
+    """Severity, patch, all v3 fields, slim output, RAG persist, per-error metrics."""
     t0 = time.perf_counter()
     line = state.get("current_line", "")
     validated = dict(state.get("validated_solution") or {})
     cls = state.get("classification") or {}
     ctx = (state.get("context_payload") or {}).get("context") or {}
     snippet = ctx.get("codebase_snippet")
+    similar_cases = state.get("similar_cases") or []
 
     sev = assign_severity(line, str(validated.get("type", "unknown")), cls)
     patch = generate_patch(line, validated, snippet)
 
+    # Build slim output — include all v3 fields
     slim = {k: v for k, v in validated.items() if k != "context"}
     slim["severity"] = sev["severity"]
     slim["priority"] = sev.get("priority")
     slim["patch"] = patch
+    slim["similar_cases"] = similar_cases
+
+    # Ensure v3 fields exist even if LLM didn't return them
+    slim.setdefault("reason", {"immediate": "", "root": "", "why_fix_works": ""})
+    slim.setdefault("root_cause", {"level_1": "", "level_2": "", "level_3": ""})
+    slim.setdefault("fix_risk", {"level": "medium", "reason": ""})
+    if not isinstance(slim.get("confidence"), dict):
+        v = float(slim.get("confidence", 0.5))
+        slim["confidence"] = {"overall": v, "pattern_match": v, "llm_reasoning": v, "context_match": v}
+
+    # Slim context block
     if "context" in validated:
         slim["context"] = {
             "file": (validated.get("context") or {}).get("file"),
@@ -184,6 +209,7 @@ def node_postprocess(state: AnalysisState) -> dict[str, Any]:
             "resolved_path": (validated.get("context") or {}).get("resolved_path"),
         }
 
+    # RAG persist
     rag_on = bool(state.get("use_rag")) or config.ENABLE_RAG
     if rag_on:
         try:
@@ -198,8 +224,6 @@ def node_postprocess(state: AnalysisState) -> dict[str, Any]:
             pass
 
     dt = time.perf_counter() - t0
-    cause = str(validated.get("cause", ""))
-    # Count LLM outcomes only when an API key is configured
     if config.has_llm_credentials():
         llm_ok = "llm_error" not in validated
         succ, fail = (1, 0) if llm_ok else (0, 1)
@@ -227,6 +251,8 @@ def route_continue(state: AnalysisState) -> Literal["dequeue", "end"]:
 def node_finalize(_: AnalysisState) -> dict[str, Any]:
     return {"status": "done"}
 
+
+# ── Graph ─────────────────────────────────────────────────────────────────────
 
 def build_analysis_graph():
     g = StateGraph(AnalysisState)
@@ -267,6 +293,8 @@ def build_analysis_graph():
     return g.compile()
 
 
+# ── Public API ────────────────────────────────────────────────────────────────
+
 def run_analysis(
     project_path: str,
     *,
@@ -275,6 +303,7 @@ def run_analysis(
 ) -> dict[str, Any]:
     """
     Returns {"results": [...], "metrics": {...}}.
+    Each result now includes: reason, confidence (dict), root_cause, fix_risk, similar_cases.
     """
     graph = build_analysis_graph()
     t_wall = time.perf_counter()
@@ -301,7 +330,11 @@ def run_analysis(
                 "patch": "",
                 "severity": "low",
                 "priority": 5,
-                "confidence": 0.0,
+                "confidence": {"overall": 0.0, "pattern_match": 0.0, "llm_reasoning": 0.0, "context_match": 0.0},
+                "reason": {"immediate": "", "root": "", "why_fix_works": ""},
+                "root_cause": {"level_1": "", "level_2": "", "level_3": ""},
+                "fix_risk": {"level": "low", "reason": "No error detected."},
+                "similar_cases": [],
             }
         ]
 
