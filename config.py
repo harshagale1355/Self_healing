@@ -1,6 +1,7 @@
 """
 Central configuration: LLM providers, paths, and runtime flags.
-Reads from environment variables with sensible defaults.
+Loads `.env` from the project root (if present), then reads environment variables.
+Existing shell env vars override `.env` (override=False).
 """
 from __future__ import annotations
 
@@ -8,14 +9,41 @@ import os
 from pathlib import Path
 from typing import Literal
 
-# LLM provider: "openai" | "groq"
-LLM_PROVIDER: Literal["openai", "groq"] = os.getenv("LLM_PROVIDER", "openai").lower()  # type: ignore[assignment]
+PROJECT_ROOT = Path(__file__).resolve().parent
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+def _load_dotenv() -> None:
+    """Load GROQ_API_KEY / OPENAI_API_KEY from a local `.env` file when python-dotenv is installed."""
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path, override=False)
+    except ImportError:
+        pass
+
+
+_load_dotenv()
+
+# Keys from environment / `.env` (loaded above)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+# Provider: explicit LLM_PROVIDER wins; else prefer Groq when GROQ_API_KEY is set (typical `.env` setup)
+_explicit_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+if _explicit_provider in ("openai", "groq"):
+    LLM_PROVIDER: Literal["openai", "groq"] = _explicit_provider  # type: ignore[assignment]
+elif GROQ_API_KEY:
+    LLM_PROVIDER = "groq"  # type: ignore[assignment]
+elif OPENAI_API_KEY:
+    LLM_PROVIDER = "openai"  # type: ignore[assignment]
+else:
+    LLM_PROVIDER = "openai"  # type: ignore[assignment] — no keys; has_llm_credentials() is False
 
 # Temperature for analysis (lower = more deterministic JSON)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
@@ -37,9 +65,9 @@ MAX_LOG_FILE_BYTES = int(os.getenv("MAX_LOG_FILE_BYTES", str(5 * 1024 * 1024))) 
 
 # Codebase context: max chars read from a referenced project file
 MAX_CODE_CONTEXT_CHARS = int(os.getenv("MAX_CODE_CONTEXT_CHARS", "8000"))
-
-# Project root (for imports when running as script)
-PROJECT_ROOT = Path(__file__).resolve().parent
+# Lines around error line (total window ≈ before + 1 + after, capped by MAX_CODE_CONTEXT_CHARS)
+CODE_CONTEXT_LINES_BEFORE = int(os.getenv("CODE_CONTEXT_LINES_BEFORE", "5"))
+CODE_CONTEXT_LINES_AFTER = int(os.getenv("CODE_CONTEXT_LINES_AFTER", "5"))
 
 
 def has_llm_credentials() -> bool:

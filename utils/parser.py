@@ -26,9 +26,14 @@ _JAVA_AT = re.compile(
 )
 _JAVA_CAUSED = re.compile(r"Caused by:\s*(?P<msg>.+)")
 
-# Generic file:line
+# Go: panic often prints "main.go:123 +0x..."
+_GO_FILE_LINE = re.compile(
+    r"(?P<file>[/\w.\-]+\.go):(?P<line>\d+)",
+)
+
+# Generic file:line (Python / Node / Java / Go / Rust-style paths)
 _GENERIC_FILE_LINE = re.compile(
-    r"(?P<file>[/\w.\-]+\.(?:py|js|ts|tsx|jsx|java|go|rb))(?:\s*|:)(?:line\s*)?(?P<line>\d+)",
+    r"(?P<file>[/\w.\-]+\.(?:py|js|ts|tsx|jsx|java|go|rb|rs|kt))(?:\s*|:)(?:line\s*)?(?P<line>\d+)",
     re.IGNORECASE,
 )
 
@@ -41,6 +46,10 @@ def guess_language_from_path(path: str) -> str:
         return "javascript"
     if suf == ".java":
         return "java"
+    if suf == ".go":
+        return "go"
+    if suf == ".rs":
+        return "rust"
     return "unknown"
 
 
@@ -78,6 +87,13 @@ def parse_stack_line(line: str) -> dict[str, Any]:
         out["line"] = int(m.group("line"))
         out["function"] = f"{m.group('class')}.{m.group('method')}"
         out["language"] = "java"
+        return out
+
+    m = _GO_FILE_LINE.search(line)
+    if m:
+        out["file"] = m.group("file")
+        out["line"] = int(m.group("line"))
+        out["language"] = "go"
         return out
 
     m = _GENERIC_FILE_LINE.search(line)

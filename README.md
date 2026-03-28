@@ -1,88 +1,97 @@
-# AI-Powered Log Error Analyzer and Auto-Solver
+# AI-Powered Log Error Analyzer and Auto-Solver (v2)
 
-A reusable Python tool that scans project logs, classifies errors, extracts structured context (file, line, function), and uses an LLM to propose root causes, fixes, and code snippets. Optional **ChromaDB** RAG stores past errors for similarity search. The workflow is implemented with **LangGraph**.
+Production-oriented tool: scans logs, classifies errors, **loads source around the failing line**, **RAG** over past fixes, **LLM solutions + patches**, **severity/priority**, **metrics**, **pretty CLI**, and **Streamlit UI**.
 
 ## Features
 
-- **Multi-step pipeline**: log read → error filter → per-error classify → context extraction → optional RAG → solution generation → validation
-- **Error categories**: syntax, runtime, memory, file_system, network, database, api, dependency, config, unknown
-- **Log formats**: Python tracebacks, Node-style stacks, Java stack lines, generic `file:line` patterns
-- **CLI**: `ai-debugger run <project_dir>`
-- **Optional UI**: Streamlit app for uploads and project paths
-- **Output**: JSON array of objects with `error`, `type`, `cause`, `fix`, `code`, `confidence`, plus optional `validation` and slim `context`
+| Feature | Description |
+|--------|-------------|
+| **Codebase awareness** | `agents/code_context.py` reads configurable lines before/after the error (`CODE_CONTEXT_LINES_BEFORE` / `AFTER`). |
+| **RAG** | `rag/vector_store.py` + `rag/retriever.py` store `error → cause → fix → code` in Chroma and retrieve similar cases. |
+| **CLI** | `cli.py`: `ai-debugger run` (Rich panels), `--json` for machine output, `ai-debugger watch` polls a log file. |
+| **Patches** | `agents/patch_generator.py` asks the LLM for a unified diff or safe replacement block. |
+| **Severity** | `agents/severity.py`: `low` / `medium` / `high` + numeric `priority`. |
+| **Metrics** | `utils/logger.py` reducers + `run_analysis()` returns `{"results", "metrics"}`. |
+| **Languages** | Parsers for Python, Node, Java, Go-style paths (`utils/parser.py`). |
+
+## Output JSON (per error)
+
+```json
+{
+  "error": "...",
+  "type": "...",
+  "cause": "...",
+  "fix": "...",
+  "code": "...",
+  "patch": "...",
+  "severity": "high",
+  "priority": 1,
+  "confidence": 0.85,
+  "validation": { "approved": true, "notes": "..." },
+  "context": { "file": "...", "line": 42, "function": "...", "resolved_path": "..." }
+}
+```
+
+Top-level API:
+
+```json
+{
+  "results": [ ... ],
+  "metrics": {
+    "errors_processed": 3,
+    "llm_success": 3,
+    "llm_failures": 0,
+    "total_processing_seconds": 0.01,
+    "wall_clock_seconds": 1.2,
+    "errors_by_severity": { "high": 1, "medium": 2 }
+  }
+}
+```
 
 ## Setup
 
 ```bash
 cd /path/to/Self_healing
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-### Environment variables
+Environment: create a `.env` in the project root (see `.env.example`) or export vars in the shell.
 
-| Variable | Purpose |
-|----------|---------|
-| `OPENAI_API_KEY` | OpenAI API (default provider) |
-| `LLM_PROVIDER` | `openai` (default) or `groq` |
-| `GROQ_API_KEY` | Groq API when `LLM_PROVIDER=groq` |
-| `OPENAI_MODEL` | Default: `gpt-4o-mini` |
-| `GROQ_MODEL` | Default: `llama-3.3-70b-versatile` |
-| `ENABLE_RAG` | `true` to persist/query Chroma by default |
-| `CHROMA_PERSIST_DIR` | Chroma persistence directory |
-| `LLM_MAX_RETRIES` | Retry count for LLM JSON parsing (default `3`) |
+| Variable | Notes |
+|----------|--------|
+| `GROQ_API_KEY` | If set (e.g. in `.env`), **Groq is used for all LLM calls** unless `LLM_PROVIDER=openai` is set. |
+| `LLM_PROVIDER` | Optional override: `groq` or `openai` when both keys exist. |
+| `OPENAI_API_KEY` | Used when `LLM_PROVIDER=openai` or when no Groq key is set. |
 
-Without API keys, the tool still runs: classification and context extraction work; solutions use a **fallback** message explaining that LLM keys are missing.
+`config.py` loads `.env` via `python-dotenv` before choosing the provider (shell env still overrides `.env`).
 
-## CLI usage
+## CLI
 
 ```bash
-# Analyze all logs under a directory (skips venv, .git, node_modules, etc.)
+# Pretty colored output + metrics table
 ai-debugger run /path/to/project
 
-# Write JSON to a file
-ai-debugger run /path/to/project -o results.json
+# Raw JSON (results + metrics)
+ai-debugger run /path/to/project --json
 
-# Enable RAG for this run (requires Chroma + embeddings)
+# RAG on for this run
 ai-debugger run /path/to/project --rag
 
-# Optional: LLM-based classifier refinement (extra API calls)
-ai-debugger run /path/to/project --llm-classifier
+# Save full JSON
+ai-debugger run /path/to/project -o report.json
+
+# Poll a single log file (append-only); analyzes new error lines as they appear
+ai-debugger watch /path/to/app.log --interval 1.0
 ```
 
-Or without installing the console script:
+Legacy: `python main.py run …` still resolves to the same CLI.
 
-```bash
-PYTHONPATH=. python main.py run sample_logs
-```
-
-## Streamlit UI
+## Streamlit
 
 ```bash
 streamlit run ui/app.py
-```
-
-Upload a log file or enter a project directory, then analyze and download JSON.
-
-## Sample log and expected shape
-
-See `sample_logs/sample_mixed.log`. With LLM keys configured, each item resembles:
-
-```json
-[
-  {
-    "error": "[sample_mixed.log] ERROR ModuleNotFoundError: No module named 'requests'",
-    "type": "dependency",
-    "cause": "...",
-    "fix": "...",
-    "code": "...",
-    "confidence": 0.85,
-    "validation": { "approved": true, "notes": "..." },
-    "context": { "file": "...", "line": 42, "function": "..." }
-  }
-]
 ```
 
 ## Tests
@@ -91,16 +100,32 @@ See `sample_logs/sample_mixed.log`. With LLM keys configured, each item resemble
 pytest tests/ -q
 ```
 
-## Project layout
+## Layout
 
-- `agents/` — Log reader, error filter, classifier, context extractor, solution generator, validator
-- `workflows/graph.py` — LangGraph state machine
-- `prompts/prompts.py` — System/user prompts (strict JSON)
-- `rag/retriever.py` — Chroma optional RAG
-- `utils/` — Log discovery, parsing, LLM helpers
-- `main.py` — CLI entry
-- `ui/app.py` — Streamlit UI
+```
+main.py              # Entry shim → cli.main
+cli.py               # Click + Rich
+config.py
+agents/
+  log_reader.py, error_filter.py, classifier.py
+  context_extractor.py   # parse only
+  code_context.py        # read source window
+  solution_generator.py, validator.py, patch_generator.py, severity.py
+rag/
+  vector_store.py, retriever.py
+utils/
+  file_scanner.py, parser.py, llm_client.py, logger.py, log_monitor.py
+workflows/graph.py
+prompts/prompts.py
+ui/app.py
+```
 
-## License
+## Sample
 
-Use and modify freely in your own projects.
+`sample_logs/sample_mixed.log` — run:
+
+```bash
+ai-debugger run sample_logs --no-rag --json | head
+```
+
+Without API keys, solutions use the rule-based fallback; severity/patch/context still populate.

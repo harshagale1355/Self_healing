@@ -8,6 +8,7 @@ import pytest
 
 from agents.error_filter import filter_error_lines
 from agents.classifier import classify_error_line_rules
+from agents.code_context import enrich_code_context
 from agents.context_extractor import extract_context
 from utils.parser import parse_stack_line
 
@@ -48,9 +49,10 @@ def test_context_extractor(tmp_path: Path):
     p = tmp_path / "mod.py"
     p.write_text("\n" * 4 + "def foo():\n    raise RuntimeError('x')\n")
     line = f'  File "{p}", line 5, in foo'
-    ctx = extract_context(line, project_path=tmp_path)
-    assert ctx["context"].get("line") == 5
-    snip = ctx["context"].get("codebase_snippet")
+    payload = extract_context(line, project_path=tmp_path)
+    enriched = enrich_code_context(tmp_path, payload)
+    assert enriched["context"].get("line") == 5
+    snip = enriched["context"].get("codebase_snippet")
     assert snip and "def foo" in snip
 
 
@@ -62,8 +64,19 @@ def test_expected_json_shape():
         "cause": "…",
         "fix": "…",
         "code": "",
+        "patch": "--- a/x\n+++ b/x\n",
+        "severity": "high",
         "confidence": 0.85,
     }
     parsed = json.loads(json.dumps(sample))
-    for k in ("error", "type", "cause", "fix", "code", "confidence"):
+    for k in ("error", "type", "cause", "fix", "code", "patch", "severity", "confidence"):
         assert k in parsed
+
+
+def test_run_analysis_returns_metrics(tmp_path: Path):
+    (tmp_path / "t.log").write_text("ERROR boom\n", encoding="utf-8")
+    from workflows.graph import run_analysis
+
+    out = run_analysis(str(tmp_path), use_rag=False)
+    assert "results" in out and "metrics" in out
+    assert isinstance(out["metrics"], dict)

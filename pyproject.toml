@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-log-error-analyzer"
-version = "1.0.0"
+version = "2.0.0"
 description = "AI-Powered Log Error Analyzer and Auto-Solver"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,4 +15,4 @@ ai-debugger = "main:main"
 
 [tool.setuptools]
 packages = ["agents", "utils", "workflows", "prompts", "rag", "ui"]
-py-modules = ["main", "config"]
+py-modules = ["main", "config", "cli"]

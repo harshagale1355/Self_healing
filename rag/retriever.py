@@ -1,92 +1,66 @@
 """
-Optional RAG: store error embeddings in ChromaDB and retrieve similar past errors.
+RAG: retrieve similar past errors using ErrorVectorStore; legacy string list for prompts.
 """
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 import config
 
-
-def _embed(text: str) -> list[float]:
-    """Prefer local Chroma default embeddings; fall back to OpenAI if configured."""
-    try:
-        import chromadb.utils.embedding_functions as ef
-
-        fn = ef.DefaultEmbeddingFunction()
-        vec = fn([text])
-        if vec is not None and len(vec) > 0:
-            return list(vec[0])
-    except Exception:
-        pass
-    if config.OPENAI_API_KEY:
-        try:
-            from langchain_openai import OpenAIEmbeddings
-
-            emb = OpenAIEmbeddings(api_key=config.OPENAI_API_KEY)
-            return list(emb.embed_query(text))
-        except Exception:
-            pass
-    return []
+from rag.vector_store import ErrorVectorStore
 
 
 class ErrorRAGRetriever:
     """
-    Thin wrapper around Chroma persistent client.
-    If chromadb or embeddings fail, methods become no-ops and return empty lists.
+    Backwards-compatible API: similar() returns text lines for LLM;
+    similar_structured() returns dicts for richer prompts.
     """
 
-    def __init__(self, collection_name: str = "log_errors", enabled: bool | None = None) -> None:
-        self._collection = None
-        self._collection_name = collection_name
-        self._enabled = config.ENABLE_RAG if enabled is None else enabled
-        if not self._enabled:
-            return
-        try:
-            import chromadb
-            from chromadb.config import Settings
-
-            config.CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
-            client = chromadb.PersistentClient(
-                path=str(config.CHROMA_PERSIST_DIR),
-                settings=Settings(anonymized_telemetry=False),
-            )
-            self._collection = client.get_or_create_collection(name=collection_name)
-        except Exception:
-            self._collection = None
+    def __init__(self, collection_name: str = "error_solutions", enabled: bool | None = None) -> None:
+        self._store = ErrorVectorStore(collection_name=collection_name, enabled=enabled)
 
     def add_error(self, error_line: str, metadata: dict[str, Any] | None = None) -> None:
-        if self._collection is None:
-            return
+        """Legacy: map flat metadata to structured add when possible."""
         meta = metadata or {}
-        uid = hashlib.sha256(error_line.encode("utf-8", errors="replace")).hexdigest()[:32]
-        emb = _embed(error_line)
-        if not emb:
-            return
-        # Chroma metadata: flat strings only
-        flat: dict[str, str] = {str(k): str(v)[:4000] for k, v in meta.items()}
-        try:
-            self._collection.upsert(
-                ids=[uid],
-                embeddings=[emb],
-                documents=[error_line[:8000]],
-                metadatas=[flat],
-            )
-        except Exception:
-            pass
+        self._store.add(
+            error_line=error_line,
+            cause=str(meta.get("cause", "")),
+            fix=str(meta.get("fix", "")),
+            code=str(meta.get("code", "")),
+            err_type=str(meta.get("type", "unknown")),
+        )
+
+    def add_resolution(
+        self,
+        *,
+        error_line: str,
+        cause: str,
+        fix: str,
+        code: str,
+        err_type: str,
+    ) -> None:
+        self._store.add(
+            error_line=error_line,
+            cause=cause,
+            fix=fix,
+            code=code,
+            err_type=err_type,
+        )
 
     def similar(self, error_line: str, k: int = 4) -> list[str]:
-        if self._collection is None:
-            return []
-        emb = _embed(error_line)
-        if not emb:
-            return []
-        try:
-            res = self._collection.query(query_embeddings=[emb], n_results=k)
-            docs = (res or {}).get("documents") or []
-            if docs and docs[0]:
-                return [d for d in docs[0] if d]
-        except Exception:
-            pass
-        return []
+        """Plain-text lines for prompt inclusion (similarity reasoning)."""
+        rows = self.similar_structured(error_line, k=k)
+        lines: list[str] = []
+        for i, r in enumerate(rows, 1):
+            chunk = (
+                f"[Past {i}] type={r.get('type','')}\n"
+                f"cause: {r.get('cause','')[:500]}\n"
+                f"fix: {r.get('fix','')[:500]}\n"
+            )
+            if r.get("code"):
+                chunk += f"code: {r['code'][:400]}\n"
+            lines.append(chunk)
+        return lines
+
+    def similar_structured(self, error_line: str, k: int = 5) -> list[dict[str, Any]]:
+        return self._store.query_similar(error_line, k=k)

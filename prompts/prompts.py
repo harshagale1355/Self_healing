@@ -91,3 +91,38 @@ def build_validation_user_prompt(
         f"{json.dumps(proposed, ensure_ascii=False, indent=2)}\n\n"
         "Validate and return only the validation JSON."
     )
+
+
+PATCH_SYSTEM = """You produce a minimal, safe unified-diff style patch OR a clear code replacement block.
+Respond with a single JSON object only:
+{
+  "patch": "string — unified diff (preferred) or commented replacement block",
+  "unsafe": false,
+  "notes": "brief note if patch is abbreviated"
+}
+Rules:
+- Prefer unified diff format (---/+++ lines, @@ hunk headers) when old/new lines are clear.
+- If you cannot form a safe diff, set patch to the exact new code block with a short comment prefix and unsafe=false.
+- Set unsafe=true only if applying the change could delete data, expose secrets, or break production; then patch should explain why.
+- Do not include markdown fences.
+"""
+
+
+def build_patch_user_prompt(
+    error_line: str,
+    fix_description: str,
+    suggested_code: str,
+    codebase_snippet: str | None,
+) -> str:
+    parts = [
+        "Log error line:",
+        error_line,
+        "\nFix description:",
+        fix_description,
+        "\nModel-suggested corrected code:",
+        suggested_code or "(none)",
+    ]
+    if codebase_snippet:
+        parts.extend(["\nSurrounding file context (line numbers may help build diff):\n", codebase_snippet[: app_config.MAX_CODE_CONTEXT_CHARS]])
+    parts.append("\nReturn only the JSON object with patch and unsafe fields.")
+    return "\n".join(parts)
