@@ -31,52 +31,57 @@ import config
 from utils.patch_applier import apply_patch
 from workflows.graph import run_analysis
 
+# ── Modern Design Tokens ───────────────────────────────────────────────────────
+
+class AppColors:
+    BG_DARK = "#0B0E14"          # Deep Space Zinc
+    SURFACE_DARK = "#151921"     # Lighter Zinc
+    ACCENT_INDIGO = "#6366F1"    # Indigo-500
+    ACCENT_VIOLET = "#8B5CF6"    # Violet-500
+    TEXT_PRIMARY = "#F8FAFC"     # Slate-50
+    TEXT_SECONDARY = "#94A3B8"   # Slate-400
+    TEXT_MUTED = "#64748B"       # Slate-500
+    
+    # Severity & Risk
+    HIGH = "#EF4444"             # Red-500
+    MEDIUM = "#F59E0B"           # Amber-500
+    LOW = "#10B981"              # Emerald-500
+    SUCCESS = "#10B981"
+    ERROR = "#EF4444"
 
 # ── Global UI Helpers ──────────────────────────────────────────────────────────
 
 def _sev_badge(sev: str) -> ft.Container:
     s = (sev or "unknown").lower()
-    if s == "high":
-        text, color, bgcolor = "🔴 HIGH", "#ff6b6b", "#331111"
-    elif s == "medium":
-        text, color, bgcolor = "🟡 MEDIUM", "#ffcc44", "#332200"
-    elif s == "low":
-        text, color, bgcolor = "🟢 LOW", "#44ff88", "#113311"
-    else:
-        text, color, bgcolor = f"⚪ {s.upper()}", "#aaaaaa", "#222222"
+    color = AppColors.HIGH if s == "high" else AppColors.MEDIUM if s == "medium" else AppColors.LOW if s == "low" else AppColors.TEXT_MUTED
     return ft.Container(
-        content=ft.Text(text, size=11, weight="bold", color=color),
-        padding=ft.padding.symmetric(horizontal=10, vertical=3),
-        border_radius=20,
-        bgcolor=bgcolor,
-        border=ft.border.all(1, color),
+        content=ft.Text(f"{s.upper()}", size=10, weight="bold", color=color),
+        padding=ft.padding.symmetric(horizontal=12, vertical=4),
+        border_radius=30,
+        bgcolor=f"{color}15",
+        border=ft.border.all(1, f"{color}40"),
     )
-
 
 def _risk_badge(level: str) -> ft.Container:
     l = (level or "medium").lower()
-    if l == "high":
-        text, color, bgcolor = "🔴 HIGH RISK", "#ff5555", "#441111"
-    elif l == "medium":
-        text, color, bgcolor = "🟡 MEDIUM RISK", "#ffaa33", "#332200"
-    elif l == "low":
-        text, color, bgcolor = "🟢 LOW RISK", "#55ff99", "#003311"
-    else:
-        text, color, bgcolor = f"⚪ {l.upper()} RISK", "#aaaaaa", "#222222"
+    color = AppColors.HIGH if l == "high" else AppColors.MEDIUM if l == "medium" else AppColors.LOW if l == "low" else AppColors.TEXT_MUTED
     return ft.Container(
-        content=ft.Text(text, size=11, weight="bold", color=color),
-        padding=ft.padding.symmetric(horizontal=10, vertical=3),
-        border_radius=20,
-        bgcolor=bgcolor,
-        border=ft.border.all(1, color),
+        content=ft.Row([
+            ft.Icon(ft.Icons.SHIELD_OUTLINED, size=12, color=color),
+            ft.Text(f"{l.upper()} RISK", size=10, weight="bold", color=color),
+        ], spacing=5, tight=True),
+        padding=ft.padding.symmetric(horizontal=12, vertical=4),
+        border_radius=30,
+        bgcolor=f"{color}15",
+        border=ft.border.all(1, f"{color}40"),
     )
 
 def _section_title(text: str) -> ft.Text:
     return ft.Text(
         text.upper(),
-        size=12,
+        size=11,
         weight="bold",
-        color=ft.Colors.BLUE_GREY_400,
+        color=AppColors.TEXT_MUTED,
     )
 
 
@@ -85,9 +90,13 @@ def _section_title(text: str) -> ft.Text:
 def main(page: ft.Page):
     # Base page settings
     page.title = "AI Log Error Analyzer"
+    page.bgcolor = AppColors.BG_DARK
     page.theme_mode = ft.ThemeMode.DARK
-    page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO)
-    page.padding = 20
+    page.theme = ft.Theme(
+        color_scheme_seed=AppColors.ACCENT_INDIGO,
+        font_family="Inter, system-ui, sans-serif",
+    )
+    page.padding = 30
     page.scroll = ft.ScrollMode.ADAPTIVE
 
     # State variables
@@ -125,29 +134,44 @@ def main(page: ft.Page):
     )
 
     settings_drawer = ft.NavigationDrawer(
+        bgcolor=AppColors.SURFACE_DARK,
+        indicator_color=f"{AppColors.ACCENT_INDIGO}30",
         controls=[
             ft.Container(
-                content=ft.Text("⚙️ Settings", size=20, weight="bold"),
+                content=ft.Text("Settings", size=20, weight="w800", color=AppColors.TEXT_PRIMARY),
                 padding=20,
             ),
-            ft.Divider(),
+            ft.Divider(color=f"{AppColors.TEXT_MUTED}20"),
             ft.Container(
                 content=ft.Column([
-                    ft.Text("LLM Provider Configuration"),
+                    ft.Text("API CONFIGURATION", size=10, weight="bold", color=AppColors.TEXT_MUTED),
                     settings_api_key,
-                    ft.ElevatedButton("Save Key", on_click=save_api_key),
-                    ft.Text("Set this if you don't have a .env file.", color=ft.Colors.GREY_400, size=12),
-                ]),
+                    ft.FilledButton(
+                        "Save Key", 
+                        on_click=save_api_key,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8), bgcolor=AppColors.ACCENT_INDIGO)
+                    ),
+                    ft.Text("Saved keys are stored in memory for this session.", color=AppColors.TEXT_MUTED, size=11),
+                ], spacing=15),
                 padding=20,
             ),
-            ft.Divider(),
+            ft.Divider(color=f"{AppColors.TEXT_MUTED}20"),
             ft.Container(
                 content=ft.Column([
-                    ft.Switch(label="Enable RAG memory (ChromaDB)", value=state["use_rag"], 
-                              on_change=lambda e: state.update({"use_rag": e.control.value})),
-                    ft.Switch(label="Use LLM for Classification", value=state["use_llm_cls"],
-                              on_change=lambda e: state.update({"use_llm_cls": e.control.value})),
-                ]),
+                    ft.Text("ADVANCED OPTIONS", size=10, weight="bold", color=AppColors.TEXT_MUTED),
+                    ft.Switch(
+                        label="Enable RAG memory", 
+                        value=state["use_rag"], 
+                        active_color=AppColors.ACCENT_INDIGO,
+                        on_change=lambda e: state.update({"use_rag": e.control.value})
+                    ),
+                    ft.Switch(
+                        label="LLM Classification", 
+                        value=state["use_llm_cls"],
+                        active_color=AppColors.ACCENT_INDIGO,
+                        on_change=lambda e: state.update({"use_llm_cls": e.control.value})
+                    ),
+                ], spacing=10),
                 padding=20,
             ),
         ]
@@ -167,29 +191,61 @@ def main(page: ft.Page):
 
     page.appbar = ft.AppBar(
         title=ft.Row([
-            ft.Icon(ft.Icons.SEARCH, size=30, color=ft.Colors.INDIGO_300),
-            ft.Text("AI Log Error Analyzer", size=24, weight="bold"),
-        ]),
+            ft.Container(
+                content=ft.Icon(ft.Icons.SEARCH, size=28, color=AppColors.ACCENT_INDIGO),
+                padding=10,
+                border_radius=12,
+                bgcolor=f"{AppColors.ACCENT_INDIGO}15",
+            ),
+            ft.Text("AI Log Error Analyzer", size=22, weight="w800"),
+        ], spacing=15),
         center_title=False,
-        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        bgcolor=f"{AppColors.BG_DARK}E6", # 90% opacity for glass effect
+        # toolbar_height=80,
         actions=[
-            ft.Container(content=provider_label_text, padding=10),
-            ft.IconButton(ft.Icons.SETTINGS, on_click=open_settings, tooltip="Settings"),
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(
+                        width=8, height=8, border_radius=4,
+                        bgcolor=AppColors.SUCCESS if config.has_llm_credentials() else AppColors.MEDIUM
+                    ),
+                    provider_label_text,
+                ], spacing=8),
+                padding=ft.padding.symmetric(horizontal=15, vertical=8),
+                bgcolor=f"{AppColors.SURFACE_DARK}",
+                border_radius=20,
+                margin=ft.margin.only(right=10),
+            ),
+            ft.IconButton(
+                ft.Icons.SETTINGS, 
+                on_click=open_settings, 
+                tooltip="Settings",
+            ),
+            ft.Container(width=20),
         ],
     )
 
     # ── Reusable Component Rendering ──────────────────────────────────────────
 
     def render_metrics(metrics: dict) -> ft.Row:
-        def _metric_card(label: str, value: str):
-            return ft.Card(
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text(label, size=12, color=ft.Colors.BLUE_GREY_200, weight="bold"),
-                        ft.Text(str(value), size=24, weight="w600"),
-                    ]),
-                    padding=15,
-                    width=150,
+        def _metric_card(label: str, value: str, icon: str, color: str):
+            return ft.Container(
+                content=ft.Column([
+                    ft.Row([
+                        ft.Icon(icon, size=18, color=color),
+                        ft.Text(label, size=11, color=AppColors.TEXT_MUTED, weight="bold"),
+                    ], spacing=10),
+                    ft.Text(str(value), size=28, weight="w800", color=AppColors.TEXT_PRIMARY),
+                ], spacing=8),
+                padding=20,
+                width=180,
+                bgcolor=AppColors.SURFACE_DARK,
+                border_radius=16,
+                border=ft.border.all(1, f"{AppColors.TEXT_MUTED}20"),
+                shadow=ft.BoxShadow(
+                    spread_radius=1, blur_radius=10, 
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.BLACK),
+                    offset=ft.Offset(0, 4)
                 ),
             )
 
@@ -200,12 +256,12 @@ def main(page: ft.Page):
         wall = f"{metrics.get('wall_clock_seconds', 0):.2f}s"
 
         return ft.Row([
-            _metric_card("🪲 Errors", errs),
-            _metric_card("✅ LLM OK", succ),
-            _metric_card("❌ LLM Fail", fail),
-            _metric_card("📈 Success Rate", rate),
-            _metric_card("⏱ Time", wall),
-        ], wrap=True)
+            _metric_card("ERRORS", errs, ft.Icons.BUG_REPORT, AppColors.ERROR),
+            _metric_card("LLM OK", succ, ft.Icons.CHECK_CIRCLE, AppColors.SUCCESS),
+            _metric_card("LLM FAIL", fail, ft.Icons.CANCEL, AppColors.ERROR),
+            _metric_card("SUCCESS RATE", rate, ft.Icons.INSIGHTS, AppColors.ACCENT_INDIGO),
+            _metric_card("WALL TIME", wall, ft.Icons.TIMER, AppColors.ACCENT_VIOLET),
+        ], wrap=True, spacing=15)
 
     def render_confidence(conf: dict | float) -> ft.Column:
         if not isinstance(conf, dict):
@@ -214,128 +270,150 @@ def main(page: ft.Page):
 
         rows = []
         labels = {
-            "overall": "Overall",
-            "pattern_match": "Pattern Match",
-            "llm_reasoning": "LLM Reasoning",
-            "context_match": "Context Match",
+            "overall": "OVERALL",
+            "pattern_match": "PATTERN MATCH",
+            "llm_reasoning": "LLM REASONING",
+            "context_match": "CONTEXT MATCH",
         }
         for key, label in labels.items():
             val = float(conf.get(key, 0))
-            color = ft.Colors.GREEN if val >= 0.8 else ft.Colors.AMBER if val >= 0.5 else ft.Colors.RED
+            color = AppColors.SUCCESS if val >= 0.8 else AppColors.MEDIUM if val >= 0.5 else AppColors.ERROR
             rows.append(
                 ft.Row([
-                    ft.Text(label, width=120, size=12, color=ft.Colors.BLUE_GREY_200),
-                    ft.ProgressBar(value=val, width=200, color=color, bgcolor=ft.Colors.BLUE_GREY_900),
-                    ft.Text(f"{val:.0%}", width=50, size=12, weight="bold", color=color),
-                ])
+                    ft.Text(label, width=120, size=10, weight="bold", color=AppColors.TEXT_MUTED),
+                    ft.ProgressBar(value=val, width=200, color=color, bgcolor=f"{AppColors.TEXT_MUTED}20", height=8, border_radius=4),
+                    ft.Text(f"{val:.0%}", width=50, size=11, weight="bold", color=color),
+                ], spacing=15)
             )
-        return ft.Column(rows)
+        return ft.Column(rows, spacing=10)
 
-    def create_error_card(index: int, item: dict, project_path: str) -> ft.Card:
+    def create_error_card(index: int, item: dict, project_path: str) -> ft.Container:
         sev = item.get("severity", "unknown")
         err_type = item.get("type", "unknown")
         priority = item.get("priority", "—")
         fix_risk = item.get("fix_risk") or {}
         risk_level = fix_risk.get("level", "medium")
+        
+        sev_color = AppColors.HIGH if sev == "high" else AppColors.MEDIUM if sev == "medium" else AppColors.LOW if sev == "low" else AppColors.TEXT_MUTED
 
-        card_title = f"#{index} · {err_type.upper()} · {sev.upper()} · P{priority}"
+        card_title = f"#{index} · {err_type.upper()}"
         
         # Header area
         header_row = ft.Row([
             _sev_badge(sev),
             _risk_badge(risk_level),
-        ], spacing=10)
+            ft.VerticalDivider(width=1, color=f"{AppColors.TEXT_MUTED}20"),
+            ft.Text(f"PRIORITY {priority}", size=10, weight="bold", color=AppColors.TEXT_MUTED),
+        ], spacing=15)
 
         err_txt = (item.get("error") or "")[:500]
         err_display = ft.Container(
-            content=ft.Text(f"Error: {err_txt}", font_family="monospace", size=13),
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            padding=10,
-            border_radius=5,
+            content=ft.Text(err_txt, font_family="monospace", size=13, color=AppColors.TEXT_PRIMARY),
+            bgcolor=f"{AppColors.BG_DARK}",
+            padding=15,
+            border_radius=8,
+            border=ft.border.all(1, f"{AppColors.TEXT_MUTED}20"),
         )
 
         ctx = item.get("context") or {}
         ctx_text = ""
         if ctx.get("file"):
-            ctx_text = f"📍 {ctx.get('file')}:{ctx.get('line', '?')} {ctx.get('function') or ''}"
+            ctx_text = f"{ctx.get('file')}:{ctx.get('line', '?')} → {ctx.get('function') or ''}"
 
-        cause_col = ft.Column([ft.Text("🔎 Cause", weight="bold"), ft.Text(item.get("cause", "") or "—")], expand=1)
-        fix_col = ft.Column([ft.Text("🛠 Fix", weight="bold"), ft.Text(item.get("fix", "") or "—")], expand=1)
+        cause_col = ft.Column([
+            _section_title("🔎 CAUSE"), 
+            ft.Text(item.get("cause", "") or "—", color=AppColors.TEXT_SECONDARY, size=13)
+        ], expand=1, spacing=10)
+        
+        fix_col = ft.Column([
+            _section_title("🛠 SUGGESTED FIX"), 
+            ft.Text(item.get("fix", "") or "—", color=AppColors.TEXT_SECONDARY, size=13)
+        ], expand=1, spacing=10)
 
         reason = item.get("reason") or {}
-        explain_col = None
+        explain_area = None
         if any(reason.values()):
-            explain_col = ft.Column([
-                _section_title("💡 Explainability"),
-                ft.Row([
-                    ft.Column([ft.Text("Immediate Trigger", weight="bold", size=12), ft.Text(reason.get("immediate") or "—", size=12)], expand=1),
-                    ft.Column([ft.Text("Root Cause", weight="bold", size=12), ft.Text(reason.get("root") or "—", size=12)], expand=1),
-                    ft.Column([ft.Text("Why Fix Works", weight="bold", size=12), ft.Text(reason.get("why_fix_works") or "—", size=12)], expand=1),
-                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
-            ])
+            explain_area = ft.Container(
+                content=ft.Column([
+                    _section_title("💡 EXPLAINABILITY"),
+                    ft.Row([
+                        ft.Column([ft.Text("IMMEDIATE TRIGGER", weight="bold", size=10, color=AppColors.TEXT_MUTED), ft.Text(reason.get("immediate") or "—", size=12, color=AppColors.TEXT_SECONDARY)], expand=1, spacing=5),
+                        ft.Column([ft.Text("ROOT CAUSE", weight="bold", size=10, color=AppColors.TEXT_MUTED), ft.Text(reason.get("root") or "—", size=12, color=AppColors.TEXT_SECONDARY)], expand=1, spacing=5),
+                        ft.Column([ft.Text("WHY IT WORKS", weight="bold", size=10, color=AppColors.TEXT_MUTED), ft.Text(reason.get("why_fix_works") or "—", size=12, color=AppColors.TEXT_SECONDARY)], expand=1, spacing=5),
+                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, spacing=20)
+                ], spacing=15),
+                padding=20,
+                bgcolor=f"{AppColors.ACCENT_INDIGO}08",
+                border_radius=12,
+            )
 
         patch_txt = (item.get("patch") or "").strip()
         patch_controls = []
         if patch_txt:
-            patch_controls.append(_section_title("📋 Patch (diff)"))
-            patch_controls.append(ft.TextField(
-                value=patch_txt, read_only=True, multiline=True,
-                text_style=ft.TextStyle(font_family="monospace", size=12),
-                min_lines=3, max_lines=10,
-                border_color=ft.Colors.BLUE_GREY_700,
+            patch_controls.append(_section_title("📋 PATCH DIFF"))
+            patch_controls.append(ft.Container(
+                content=ft.Text(patch_txt, font_family="monospace", size=11, color=AppColors.TEXT_PRIMARY),
+                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                padding=15,
+                border_radius=8,
+                border=ft.border.all(1, f"{AppColors.ACCENT_INDIGO}30"),
             ))
             
             def apply_fix_click(e, patch=patch_txt, proj=project_path):
                 e.control.disabled = True
-                e.control.text = "Applying..."
+                e.control.content = ft.ProgressRing(width=16, height=16, color=AppColors.TEXT_PRIMARY)
                 page.update()
                 
                 res = apply_patch(patch, project_root=proj)
-                e.control.text = "⚡ Apply Fix"
+                e.control.content = ft.Row([ft.Icon(ft.Icons.BOLT), ft.Text("Apply Fix")], spacing=10, tight=True)
                 e.control.disabled = False
                 
                 if res["success"]:
-                    page.snack_bar = ft.SnackBar(ft.Text(f"✅ {res['message']}"), bgcolor=ft.Colors.GREEN_800)
+                    page.snack_bar = ft.SnackBar(ft.Text(f"✅ {res['message']}"), bgcolor=AppColors.SUCCESS)
                 else:
-                    page.snack_bar = ft.SnackBar(ft.Text(f"❌ {res['message']}"), bgcolor=ft.Colors.RED_800)
+                    page.snack_bar = ft.SnackBar(ft.Text(f"❌ {res['message']}"), bgcolor=AppColors.ERROR)
                 page.snack_bar.open = True
                 page.update()
 
-            patch_controls.append(ft.ElevatedButton(
-                "⚡ Apply Fix",
-                color=ft.Colors.WHITE,
-                bgcolor=ft.Colors.BLUE_700,
+            patch_controls.append(ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.BOLT), ft.Text("Apply Fix")], spacing=10, tight=True),
+                padding=ft.padding.symmetric(horizontal=20, vertical=12),
+                bgcolor=AppColors.ACCENT_INDIGO,
+                border_radius=8,
                 on_click=apply_fix_click,
             ))
 
         code_txt = (item.get("code") or "").strip()
         code_controls = []
         if code_txt:
-            code_controls.append(_section_title("💻 Suggested Code"))
-            code_controls.append(ft.TextField(
-                value=code_txt, read_only=True, multiline=True,
-                text_style=ft.TextStyle(font_family="monospace", size=12),
-                min_lines=3, max_lines=10,
-                border_color=ft.Colors.BLUE_GREY_700,
+            code_controls.append(_section_title("💻 SUGGESTED CODE"))
+            code_controls.append(ft.Container(
+                content=ft.Text(code_txt, font_family="monospace", size=11, color=AppColors.TEXT_PRIMARY),
+                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                padding=15,
+                border_radius=8,
+                border=ft.border.all(1, f"{AppColors.TEXT_MUTED}30"),
             ))
 
         sim_cases = item.get("similar_cases") or []
         sim_controls = []
         if sim_cases:
-            sim_controls.append(_section_title(f"🔍 Similar Issues Found (RAG Memory)"))
+            sim_controls.append(_section_title(f"🔍 RAG MEMORY (SIMILAR ISSUES)"))
             for i, c in enumerate(sim_cases, 1):
                 sim = float(c.get("similarity", 0))
                 sim_controls.append(
                     ft.ExpansionTile(
-                        title=ft.Text(f"Match #{i} — similarity {sim:.0%}", size=13),
+                        title=ft.Text(f"Match #{i} — {sim:.0%} Similarity", size=12, weight="bold"),
+                        controls_padding=15,
+                        collapsed_text_color=AppColors.TEXT_SECONDARY,
+                        text_color=AppColors.ACCENT_INDIGO,
                         controls=[
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Text(f"**Error:** {c.get('error', '')[:300]}", size=12),
-                                    ft.Text(f"**Past fix:** {c.get('fix', '')[:300]}", size=12),
-                                ]),
-                                padding=10,
-                            )
+                            ft.Column([
+                                ft.Text("PAST ERROR", size=10, weight="bold", color=AppColors.TEXT_MUTED),
+                                ft.Text(c.get('error', '')[:300], size=11, color=AppColors.TEXT_SECONDARY),
+                                ft.Text("PAST FIX", size=10, weight="bold", color=AppColors.TEXT_MUTED),
+                                ft.Text(c.get('fix', '')[:300], size=11, color=AppColors.TEXT_SECONDARY),
+                            ], spacing=8)
                         ]
                     )
                 )
@@ -345,43 +423,49 @@ def main(page: ft.Page):
             err_display,
         ]
         if ctx_text:
-            body_controls.append(ft.Text(ctx_text, size=12, color=ft.Colors.BLUE_GREY_300))
+            body_controls.append(ft.Row([
+                ft.Icon(ft.Icons.LOCATION_ON, size=14, color=AppColors.TEXT_MUTED),
+                ft.Text(ctx_text, size=11, color=AppColors.TEXT_MUTED, font_family="monospace"),
+            ], spacing=5))
         
         body_controls.extend([
-            ft.Divider(color=ft.Colors.BLUE_GREY_800),
-            ft.Row([cause_col, fix_col], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START),
+            ft.Divider(height=20, color=f"{AppColors.TEXT_MUTED}10"),
+            ft.Row([cause_col, fix_col], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, spacing=30),
         ])
         
-        if explain_col:
-            body_controls.extend([ft.Divider(color=ft.Colors.BLUE_GREY_800), explain_col])
+        if explain_area:
+            body_controls.extend([ft.Divider(height=20, color="transparent"), explain_area])
             
         body_controls.extend([
-            ft.Divider(color=ft.Colors.BLUE_GREY_800),
-            _section_title("📊 Confidence Breakdown"),
+            ft.Divider(height=20, color=f"{AppColors.TEXT_MUTED}10"),
+            _section_title("📊 CONFIDENCE SCORE"),
             render_confidence(item.get("confidence")),
         ])
 
         if code_controls:
-            body_controls.extend([ft.Divider(color=ft.Colors.BLUE_GREY_800)] + code_controls)
+            body_controls.extend([ft.Divider(height=30, color="transparent")] + code_controls)
             
         if patch_controls:
-            body_controls.extend([ft.Divider(color=ft.Colors.BLUE_GREY_800)] + patch_controls)
+            body_controls.extend([ft.Divider(height=30, color="transparent")] + patch_controls)
             
         if sim_controls:
-            body_controls.extend([ft.Divider(color=ft.Colors.BLUE_GREY_800)] + sim_controls)
+            body_controls.extend([ft.Divider(height=30, color="transparent")] + sim_controls)
 
-        return ft.Card(
+        return ft.Container(
             content=ft.ExpansionTile(
-                title=ft.Text(card_title, weight="bold"),
-                initially_expanded=(index <= 2),
-                controls=[
-                    ft.Container(
-                        content=ft.Column(body_controls, spacing=10),
-                        padding=20,
-                    )
-                ]
+                title=ft.Text(card_title, weight="w700", size=15, color=AppColors.TEXT_PRIMARY),
+                subtitle=ft.Text(f"Severity: {sev.upper()}", size=11, color=AppColors.TEXT_MUTED),
+                initially_expanded=(index <= 1),
+                controls_padding=25,
+                collapsed_text_color=AppColors.TEXT_PRIMARY,
+                text_color=AppColors.ACCENT_INDIGO,
+                icon_color=AppColors.TEXT_MUTED,
+                controls=[ft.Column(body_controls, spacing=15)]
             ),
-            margin=ft.margin.only(bottom=10),
+            bgcolor=AppColors.SURFACE_DARK,
+            border_radius=16,
+            border=ft.border.only(left=ft.BorderSide(4, sev_color)),
+            margin=ft.margin.only(bottom=15),
         )
 
     # ── Upload Log Tab ────────────────────────────────────────────────────────
@@ -398,16 +482,31 @@ def main(page: ft.Page):
 
     tab_upload = ft.Container(
         content=ft.Column([
-            ft.Text("Upload a log file to analyse", size=16),
-            ft.ElevatedButton(
-                "🚀 Browse file and Analyse", 
-                icon=ft.Icons.FOLDER_OPEN,
-                on_click=lambda _: file_picker.pick_files(allow_multiple=False),
-                height=45,
+            ft.Container(
+                content=ft.Column([
+                    _section_title("SELECT LOG FILE"),
+                    ft.Text("Upload a local log file (.log, .txt) to start deep analysis.", color=AppColors.TEXT_SECONDARY, size=13),
+                    ft.Container(height=10),
+                    ft.FilledButton(
+                        "Browse and Analyse", 
+                        icon=ft.Icons.UPLOAD_FILE,
+                        on_click=lambda _: file_picker.pick_files(allow_multiple=False),
+                        height=50,
+                        style=ft.ButtonStyle(
+                            bgcolor=AppColors.ACCENT_INDIGO,
+                            shape=ft.RoundedRectangleBorder(radius=12)
+                        )
+                    ),
+                ], spacing=5),
+                padding=30,
+                bgcolor=AppColors.SURFACE_DARK,
+                border_radius=20,
+                border=ft.border.all(1, f"{AppColors.TEXT_MUTED}20"),
             ),
+            ft.Container(height=20),
             upload_results,
         ]),
-        padding=20,
+        padding=ft.padding.only(top=20),
     )
 
     # ── Project Directory Tab ──────────────────────────────────────────────────
@@ -432,20 +531,40 @@ def main(page: ft.Page):
 
     tab_project = ft.Container(
         content=ft.Column([
-            ft.Text("Scan a project directory for log files", size=16),
-            ft.Row([
-                project_dir_input,
-                ft.IconButton(ft.Icons.FOLDER, on_click=lambda _: dir_picker.get_directory_path()),
-            ]),
-            ft.ElevatedButton(
-                "🚀 Analyse Project", 
-                icon=ft.Icons.PLAY_ARROW,
-                on_click=analyze_project_click,
-                height=45,
+            ft.Container(
+                content=ft.Column([
+                    _section_title("SCAN DIRECTORY"),
+                    ft.Text("Select a folder to scan for all relevant log files.", color=AppColors.TEXT_SECONDARY, size=13),
+                    ft.Container(height=10),
+                    ft.Row([
+                        project_dir_input,
+                        ft.IconButton(
+                            ft.Icons.FOLDER_OPEN, 
+                            on_click=lambda _: dir_picker.get_directory_path(),
+                            icon_color=AppColors.ACCENT_INDIGO,
+                        ),
+                    ], spacing=10),
+                    ft.Container(height=10),
+                    ft.FilledButton(
+                        "Start Batch Analysis", 
+                        icon=ft.Icons.PLAY_CIRCLE_FILLED,
+                        on_click=analyze_project_click,
+                        height=50,
+                        style=ft.ButtonStyle(
+                            bgcolor=AppColors.ACCENT_INDIGO,
+                            shape=ft.RoundedRectangleBorder(radius=12)
+                        )
+                    ),
+                ], spacing=5),
+                padding=30,
+                bgcolor=AppColors.SURFACE_DARK,
+                border_radius=20,
+                border=ft.border.all(1, f"{AppColors.TEXT_MUTED}20"),
             ),
+            ft.Container(height=20),
             project_results,
         ]),
-        padding=20,
+        padding=ft.padding.only(top=20),
     )
 
     # ── Live Monitor Tab ───────────────────────────────────────────────────────
@@ -536,13 +655,28 @@ def main(page: ft.Page):
 
     tab_monitor = ft.Container(
         content=ft.Column([
-            ft.Text("Real-time log file monitoring", size=16),
-            ft.Row([monitor_file_input, monitor_interval]),
-            ft.Row([btn_start, btn_stop, monitor_status]),
-            ft.Divider(),
+            ft.Container(
+                content=ft.Column([
+                    _section_title("LIVE LOG STREAMING"),
+                    ft.Text("Watch a log file in real-time. New errors will appear instantly.", color=AppColors.TEXT_SECONDARY, size=13),
+                    ft.Container(height=10),
+                    ft.Row([monitor_file_input, monitor_interval], spacing=20),
+                    ft.Row([
+                        btn_start, 
+                        btn_stop, 
+                        ft.VerticalDivider(width=1, color=f"{AppColors.TEXT_MUTED}20"),
+                        monitor_status
+                    ], spacing=20),
+                ], spacing=10),
+                padding=30,
+                bgcolor=AppColors.SURFACE_DARK,
+                border_radius=20,
+                border=ft.border.all(1, f"{AppColors.TEXT_MUTED}20"),
+            ),
+            ft.Divider(height=40, color="transparent"),
             monitor_results_col,
         ]),
-        padding=20,
+        padding=ft.padding.only(top=20),
     )
 
     # ── Shared Action Logic ────────────────────────────────────────────────────
@@ -626,12 +760,28 @@ def main(page: ft.Page):
     
     tabs = ft.Tabs(
         selected_index=0,
-        animation_duration=300,
+        animation_duration=400,
         expand=True,
+        label_color=AppColors.ACCENT_INDIGO,
+        unselected_label_color=AppColors.TEXT_MUTED,
+        indicator_color=AppColors.ACCENT_INDIGO,
+        divider_color="transparent",
         tabs=[
-            ft.Tab(text="📁 Upload Log", content=tab_upload),
-            ft.Tab(text="📂 Project Directory", content=tab_project),
-            ft.Tab(text="📡 Live Monitor", content=tab_monitor),
+            ft.Tab(
+                text="LOCAL FILE", 
+                icon=ft.Icons.FILE_COPY,
+                content=tab_upload
+            ),
+            ft.Tab(
+                text="PROJECT SCAN", 
+                icon=ft.Icons.FOLDER,
+                content=tab_project
+            ),
+            ft.Tab(
+                text="LIVE MONITOR", 
+                icon=ft.Icons.SENSORS,
+                content=tab_monitor
+            ),
         ],
     )
 
